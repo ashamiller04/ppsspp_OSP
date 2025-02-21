@@ -20,20 +20,30 @@
 #include <thread>
 #include <mutex>
 
+#include "ext/xxhash.h"
+
 #include "Common/Data/Text/I18n.h"
+#include "Common/Data/Encoding/Utf8.h"
+#include "Common/Data/Color/RGBAUtil.h"
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/Data/Text/Parsers.h"
 #include "Common/System/System.h"
+#include "Common/Render/TextureAtlas.h"
+#include "Common/Render/Text/draw_text.h"
 
 #include "Common/File/FileUtil.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
 #include "Common/StringUtils.h"
 #include "Common/TimeUtil.h"
+#include "Common/BitScan.h"
 
 #include "Core/SaveState.h"
 #include "Core/Config.h"
 #include "Core/Core.h"
+#include "Core/Dialog/PSPSaveDialog.h"
+#include "Core/Util/PPGeDraw.h"
+#include "Core/Reporting.h"
 #include "Core/CoreTiming.h"
 #include "Core/Screenshot.h"
 #include "Core/System.h"
@@ -42,15 +52,21 @@
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/sceNet.h"
 #include "Core/HLE/ReplaceTables.h"
+#include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceDisplay.h"
 #include "Core/HLE/sceKernel.h"
+#include "Core/HLE/sceKernelMemory.h"
 #include "Core/HLE/sceUtility.h"
+#include "Core/HLE/sceGe.h"
 #include "Core/MemMap.h"
+#include "Core/MemMapHelpers.h"
 #include "Core/MIPS/MIPS.h"
 #include "Core/MIPS/JitCommon/JitBlockCache.h"
 #include "Core/RetroAchievements.h"
 #include "HW/MemoryStick.h"
+#include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
+#include "GPU/GPUCommon.h"
 
 #ifndef MOBILE_DEVICE
 #include "Core/AVIDump.h"
@@ -1017,6 +1033,7 @@ double g_lastSaveTime = -1.0;
 				break;
 
 			case SAVESTATE_SAVE:
+				// This is where Save gets called in the Log
 				INFO_LOG(Log::SaveState, "Saving state to '%s'", op.filename.c_str());
 				title = g_paramSFO.GetValueString("TITLE");
 				if (title.empty()) {
@@ -1027,6 +1044,10 @@ double g_lastSaveTime = -1.0;
 				}
 				result = CChunkFileReader::Save(op.filename, title, PPSSPP_GIT_VERSION, state);
 				if (result == CChunkFileReader::ERROR_NONE) {
+					
+					const PPGeStyle style;
+					PPGeDrawText("data saved to save state", 550, 550, style);
+
 					callbackMessage = slot_prefix + std::string(sc->T("Saved State"));
 					callbackResult = Status::SUCCESS;
 #ifndef MOBILE_DEVICE
